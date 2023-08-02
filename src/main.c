@@ -31,14 +31,6 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if (arguments.daemonize) {
-		daemonize();
-	}
-
-	tuya_mqtt_context_t client_instance;
-	tuya_mqtt_context_t *client;
-	int ret = OPRT_OK;
-
 	struct ubus_context *ctx;
 	uint32_t id;
 
@@ -49,6 +41,18 @@ int main(int argc, char **argv)
 		syslog(LOG_ERR, "Failed to connect to ubus");
 		goto cleanup;
 	}
+
+	if (arguments.daemonize) {
+		if(daemonize()){
+			goto cleanup;
+		}
+	}
+
+	tuya_mqtt_context_t client_instance;
+	tuya_mqtt_context_t *client;
+	int ret = OPRT_OK;
+
+	
 
 	client = &client_instance;
 
