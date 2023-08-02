@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/studentas/Documents/RUTX_R_GPL_00.02.06.1/build_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/libtuyasdk-1.0.2/include",
+                "/home/studentas/Documents/RUTX_R_GPL_00.02.06.1/build_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/libtuyasdk-1.0.2/interface",
+                "/home/studentas/Documents/RUTX_R_GPL_00.02.06.1/build_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/libtuyasdk-1.0.2/utils"
+            ],
+            "defines": [],
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerPath": "/usr/bin/gcc"
+        }
+    ],
+    "version": 4
+}

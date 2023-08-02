@@ -1,0 +1,32 @@
+#!/bin/sh /etc/rc.common
+ 
+USE_PROCD=1
+
+CONFIGURATION=tuya_iot
+ 
+start_service() {
+    # Reading config
+    config_load "${CONFIGURATION}"
+ 
+    config_get enabled tuya_iot_sct 'enable_tuya' '0'
+    config_get devId tuya_iot_sct 'device_id' ''
+    config_get devSec tuya_iot_sct 'device_secret' ''
+    config_get prodId tuya_iot_sct 'product_id' ''
+    
+    if [ "$enabled" -eq 1 ]; then
+    	procd_open_instance
+    	procd_set_param command /usr/bin/tuya_iot -p $prodId -d $devId -s $devSec
+    	procd_set_param pidfile /tmp/run/tuya_iot.pid
+    	procd_set_param file /etc/config/tuya_iot
+    	procd_close_instance
+    fi
+}
+
+service_triggers() {
+    procd_add_reload_trigger "tuya_iot"
+}
+
+reload_service() {
+    stop
+    start
+}
