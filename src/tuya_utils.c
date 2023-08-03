@@ -1,13 +1,5 @@
 #include "tuya_utils.h"
-#include "cJSON.h"
 #include "tuya_cacert.h"
-#include "tuya_log.h"
-#include "tuya_error_code.h"
-#include "system_interface.h"
-#include "mqtt_client_interface.h"
-#include "tuyalink_core.h"
-#include <syslog.h>
-#include "arg_parser.h"
 
 static void on_connected(tuya_mqtt_context_t *context, void *user_data)
 {
@@ -29,6 +21,8 @@ static void on_messages(tuya_mqtt_context_t *context, void *user_data, const tuy
 		} else {
 			syslog(LOG_ERR, "Failed: JSON parse was not successful");
 		}
+
+		cJSON_Delete(root);
 		break;
 	}
 
@@ -37,8 +31,8 @@ static void on_messages(tuya_mqtt_context_t *context, void *user_data, const tuy
 	}
 }
 
-int tuya_init(tuya_mqtt_context_t *client, int ret, struct arguments arguments) {
-    ret = tuya_mqtt_init(client, &(const tuya_mqtt_config_t){ 
+int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments) {
+    *ret = tuya_mqtt_init(client, &(const tuya_mqtt_config_t){ 
         .host = "m1.tuyacn.com",
 		.port = 8883,
 		.cacert	= tuya_cacert_pem,
@@ -51,12 +45,17 @@ int tuya_init(tuya_mqtt_context_t *client, int ret, struct arguments arguments) 
 		.on_disconnect = on_disconnect,
 		.on_messages = on_messages 
     });
+	if (*ret != OPRT_OK) {
+		syslog(LOG_ERR, "Tuya MQTT Initialization Error: %d", ret);
+		return -1;
+	}
 
-	ret = tuya_mqtt_connect(client);
-	if (ret != OPRT_OK) {
+	*ret = tuya_mqtt_connect(client);
+	if (*ret != OPRT_OK) {
 		syslog(LOG_ERR, "ERROR: Failed to connect to Tuya service. Error code: %d", ret);
 		return 1;
 	}
+
     return 0;
 }
 
@@ -72,16 +71,17 @@ void send_available_memory(tuya_mqtt_context_t *context, int memory)
 static void set_greeting_val(cJSON *greeting_value, tuya_mqtt_context_t *context){
 	char set_greeting[80];
 	sprintf(set_greeting, "{\"greeting\":{\"value\":\"%s\"}}", greeting_value->valuestring);
+	syslog(LOG_INFO, set_greeting);
 	tuyalink_thing_property_report_with_ack(context, NULL, set_greeting);
 }
 
 static void set_test_val(cJSON *test_value, tuya_mqtt_context_t *context) {
 	bool test_bool = cJSON_IsTrue(test_value);
-		if (test_bool) {
-			tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":true}}");
-		} else {
-			tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":false}}");
-		}
+	if (test_bool) {
+		tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":true}}");
+	} else {
+		tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":false}}");
+	}
 
 	return;
 }
@@ -101,6 +101,7 @@ void transfer_data_from_cloud(tuya_mqtt_context_t *context, const tuyalink_messa
 	} else {
 		syslog(LOG_ERR, "Failed to get greeting value from inputParams");
 	}
+
 	
 	cJSON *test_value = cJSON_GetObjectItem(input_params, "test_bool_i");
 	if (test_value != NULL) {

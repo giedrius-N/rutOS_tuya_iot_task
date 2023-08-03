@@ -1,16 +1,5 @@
 #include "arg_parser.h"
-
-struct argp_option options[] = {
-    {"prodID", 'p', "STRING", 0, "DeviceID", 0},
-    {"devId", 'd', "STRING", 0, "DeviceSecret", 0},
-    {"devSec", 's', "STRING", 0, "ProductID", 0},
-    {"daemon", 'D', 0, 0, "Daemonize the process", 0},
-    {0}
-};
-
-char args_doc[] = "DeviceID DeviceSecret ProductID";
-
-struct argp argp = {options, parse_opt, args_doc, NULL};
+#include "arg_struct.h"
 
 error_t parse_opt(int key, char *arg, struct argp_state *state) {
     struct arguments *arguments = state->input;

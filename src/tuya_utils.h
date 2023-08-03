@@ -1,15 +1,15 @@
 #ifndef TUYA_UTILS_H
 #define TUYA_UTILS_H
 
-#include "cJSON.h"
-#include "tuya_log.h"
-#include "tuya_error_code.h"
-#include "system_interface.h"
-#include "mqtt_client_interface.h"
-#include "tuyalink_core.h"
-#include "arg_parser.h"
+#include <cjson/cJSON.h>
+#include <syslog.h>
+#include <tuya_error_code.h>
+#include <system_interface.h>
+#include <mqtt_client_interface.h>
+#include <tuyalink_core.h>
+#include "arg_struct.h"
 
-int tuya_init(tuya_mqtt_context_t *client, int ret, struct arguments arguments);
+int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments);
 
 void send_available_memory(tuya_mqtt_context_t *context, int memory);
 
