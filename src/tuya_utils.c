@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <argp.h>
 #include "tuya_utils.h"
 #include "tuya_cacert.h"
 

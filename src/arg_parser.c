@@ -1,3 +1,4 @@
+#include <argp.h>
 #include "arg_parser.h"
 #include "arg_struct.h"
 

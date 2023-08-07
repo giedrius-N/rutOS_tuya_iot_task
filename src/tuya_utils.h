@@ -1,7 +1,7 @@
 #ifndef TUYA_UTILS_H
 #define TUYA_UTILS_H
 
-#include <cjson/cJSON.h>
+#include <cJSON.h>
 #include <syslog.h>
 #include <tuya_error_code.h>
 #include <system_interface.h>

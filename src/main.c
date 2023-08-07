@@ -3,15 +3,14 @@
 #include <unistd.h>
 #include <signal.h>
 #include <syslog.h>
-#include "arg_parser.h"
 #include <argp.h>
+#include "arg_parser.h"
 #include <stdbool.h>
 #include "arg_struct.h"
 
 #include "tuya_utils.h"
 #include "ubus_invoke.h"
 #include "helpers.h"
-
 
 volatile sig_atomic_t g_signal_flag = 1;
 void sig_handler()
@@ -46,7 +45,7 @@ int main(int argc, char **argv)
 	ctx = ubus_connect(NULL);
 	if (!ctx) {
 		syslog(LOG_ERR, "Failed to connect to ubus");
-		goto third_cleanup;
+		goto closing_log;
 	}
 
 	signal(SIGTERM, sig_handler);
@@ -58,12 +57,12 @@ int main(int argc, char **argv)
 	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 		syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");
 
-		goto second_cleanup;
+		goto ubus_cleanup;
 	}
 
 	if (arguments.daemonize) {
 		if(daemonize()){
-			goto second_cleanup;
+			goto ubus_cleanup;
 		}
 	}
 
@@ -71,9 +70,9 @@ int main(int argc, char **argv)
 
 	if (tuya_init(client, &ret, arguments)) {
 		if (ret == -1) {
-			goto second_cleanup;
+			goto ubus_cleanup;
 		}
-		goto first_cleanup;
+		goto tuya_cleanup;
 	}
 
 	while (g_signal_flag) {
@@ -89,11 +88,11 @@ int main(int argc, char **argv)
 	}
 
 	tuya_mqtt_disconnect(client);
-	first_cleanup:
+	tuya_cleanup:
 		ret = tuya_mqtt_deinit(client);
-	second_cleanup:
+	ubus_cleanup:
 		ubus_free(ctx);
-	third_cleanup:
+	closing_log:
 		closelog();
 	
 	return ret;
