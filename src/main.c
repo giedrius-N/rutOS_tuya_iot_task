@@ -43,6 +43,7 @@ int main(int argc, char **argv)
 	signal(SIGQUIT, sig_handler);
 
 	struct arguments arguments;
+	arguments.daemonize = false;
 
 	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 		syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");

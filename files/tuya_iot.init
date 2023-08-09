@@ -8,7 +8,7 @@ start_service() {
     # Reading config
     config_load "${CONFIGURATION}"
  
-    config_get enabled tuya_iot_sct 'enable_tuya' '0'
+    config_get enabled tuya_iot_sct 'enable' '0'
     config_get devId tuya_iot_sct 'device_id' ''
     config_get devSec tuya_iot_sct 'device_secret' ''
     config_get prodId tuya_iot_sct 'product_id' ''
@@ -20,6 +20,9 @@ start_service() {
     	procd_set_param file /etc/config/tuya_iot
     	procd_close_instance
     fi
+}
+stop_service() {
+    procd_close_instance
 }
 
 service_triggers() {
