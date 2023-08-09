@@ -37,16 +37,6 @@ int main(int argc, char **argv)
 	struct argp argp = {options, parse_opt, args_doc, NULL};
 
 	openlog("Tuya IoT", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
-	
-	struct ubus_context *ctx;
-	uint32_t id;
-
-	struct MemData memory = { 0 };
-	ctx = ubus_connect(NULL);
-	if (!ctx) {
-		syslog(LOG_ERR, "Failed to connect to ubus");
-		goto closing_log;
-	}
 
 	signal(SIGTERM, sig_handler);
 	signal(SIGINT, sig_handler);
@@ -57,12 +47,12 @@ int main(int argc, char **argv)
 	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 		syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");
 
-		goto ubus_cleanup;
+		goto closing_log;
 	}
 
 	if (arguments.daemonize) {
 		if(daemonize()){
-			goto ubus_cleanup;
+			goto closing_log;
 		}
 	}
 
@@ -70,19 +60,13 @@ int main(int argc, char **argv)
 
 	if (tuya_init(client, &ret, arguments)) {
 		if (ret == -1) {
-			goto ubus_cleanup;
+			goto closing_log;
 		}
 		goto tuya_cleanup;
 	}
 
 	while (g_signal_flag) {
 		tuya_mqtt_loop(client);
-		if (ubus_lookup_id(ctx, "system", &id) ||
-		    ubus_invoke(ctx, id, "info", NULL, board_cb, &memory, 3000)) {
-			syslog(LOG_ERR, "Cannot request memory info from ubus");
-			continue;
-		}
-		send_available_memory(client, memory.free);
 
 		sleep(2);
 	}
@@ -90,8 +74,6 @@ int main(int argc, char **argv)
 	tuya_mqtt_disconnect(client);
 	tuya_cleanup:
 		ret = tuya_mqtt_deinit(client);
-	ubus_cleanup:
-		ubus_free(ctx);
 	closing_log:
 		closelog();
 	

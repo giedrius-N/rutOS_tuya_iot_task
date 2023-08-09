@@ -1,7 +1,8 @@
-#include <stdio.h>
-#include <argp.h>
 #include "tuya_utils.h"
 #include "tuya_cacert.h"
+#include <libubox/blobmsg_json.h>
+#include <libubus.h>
+#include "ubus_invoke.h"
 
 static void on_connected(tuya_mqtt_context_t *context, void *user_data)
 {
@@ -61,32 +62,14 @@ int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments)
     return 0;
 }
 
-void send_available_memory(tuya_mqtt_context_t *context, int memory)
-{
-	const int megabyte = 1024 * 1024;
+// void send_available_memory(tuya_mqtt_context_t *context, int memory)
+// {
+// 	const int megabyte = 1024 * 1024;
 
-	char property_string[80];
-	sprintf(property_string, "{\"free_ram\":{\"value\":%d}}", (memory / megabyte));
-	tuyalink_thing_property_report_with_ack(context, NULL, property_string);
-}
-
-static void set_greeting_val(cJSON *greeting_value, tuya_mqtt_context_t *context){
-	char set_greeting[80];
-	sprintf(set_greeting, "{\"greeting\":{\"value\":\"%s\"}}", greeting_value->valuestring);
-	syslog(LOG_INFO, set_greeting);
-	tuyalink_thing_property_report_with_ack(context, NULL, set_greeting);
-}
-
-static void set_test_val(cJSON *test_value, tuya_mqtt_context_t *context) {
-	bool test_bool = cJSON_IsTrue(test_value);
-	if (test_bool) {
-		tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":true}}");
-	} else {
-		tuyalink_thing_property_report_with_ack(context, NULL, "{\"daemon_test\":{\"value\":false}}");
-	}
-
-	return;
-}
+// 	char property_string[80];
+// 	sprintf(property_string, "{\"free_ram\":{\"value\":%d}}", (memory / megabyte));
+// 	tuyalink_thing_property_report_with_ack(context, NULL, property_string);
+// }
 
 void transfer_data_from_cloud(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root)
 {
@@ -96,21 +79,203 @@ void transfer_data_from_cloud(tuya_mqtt_context_t *context, const tuyalink_messa
 		syslog(LOG_ERR, "Failed to get 'inputParams from JSON");
 		return;
 	}
-	
-	cJSON *greeting_value = cJSON_GetObjectItem(input_params, "greeting_identifier");
-	if (greeting_value != NULL) {
-		set_greeting_val(greeting_value, context);
+
+	cJSON *port_on = cJSON_GetObjectItem(input_params, "port_on");
+	cJSON *pin_on = cJSON_GetObjectItem(input_params, "pin_on");
+	if (port_on != NULL && pin_on != NULL) {
+		if (turn_pin_on(port_on, pin_on)){
+			syslog(LOG_ERR, "Failed to turn on pin");
+		} else {
+			syslog(LOG_INFO, "Pin turned on");
+		}
 	} else {
-		syslog(LOG_ERR, "Failed to get greeting value from inputParams");
+		syslog(LOG_ERR, "Failed to get turn on values from inputParams");
 	}
 
-	
-	cJSON *test_value = cJSON_GetObjectItem(input_params, "test_bool_i");
-	if (test_value != NULL) {
-		set_test_val(test_value, context);
+	cJSON *port_off = cJSON_GetObjectItem(input_params, "port_off");
+	cJSON *pin_off = cJSON_GetObjectItem(input_params, "pin_off");
+	if (port_off != NULL && pin_off != NULL) {
+		if (turn_pin_off(port_off, pin_off)){
+			syslog(LOG_ERR, "Failed to turn off pin");
+		} else {
+			syslog(LOG_INFO, "Pin turned off");
+		}
 	} else {
-		syslog(LOG_ERR, "Failed to get test bool value from inputParams");
+		syslog(LOG_ERR, "Failed to get turn off values from inputParams");
+	}
+
+	cJSON *get_devices_list = cJSON_GetObjectItem(input_params, "get_dev_list_i");
+	if (get_devices_list != NULL) {
+		send_devices_list(context, get_devices_list);
+	} else {
+		syslog(LOG_ERR, "Unable to get devices list identifier");
 	}
 
 	return;
+}
+
+static void ubus_response_cb(struct ubus_request *req, int type, struct blob_attr *msg) {
+    if (msg) {
+        char *response = blobmsg_format_json(msg, true);
+        syslog(LOG_INFO, "UBUS response: %s", response);
+        free(response);
+    } else {
+        syslog(LOG_INFO, "UBUS request failed");
+    }
+}
+
+int turn_pin_on(cJSON *port_on, cJSON *pin_on)
+{
+	char *port[20];
+	int pin = pin_on->valueint;
+	strncpy(port, port_on->valuestring, 15);
+
+	struct ubus_context *ctx = ubus_connect(NULL);
+	if (!ctx) {
+		syslog(LOG_ERR, "Failed to connect to UBUS");
+		return -1;
+	}
+
+	uint32_t id;
+	struct blob_buf buf = {0};
+    blob_buf_init(&buf, 0);
+    blobmsg_add_string(&buf, "port", port);
+    blobmsg_add_u32(&buf, "pin", pin);
+
+	struct ubus_object_data obj;
+	if (ubus_lookup_id(ctx, "esp", &id) ||
+		ubus_invoke(ctx, id, "on", buf.head, ubus_response_cb, NULL, 3000)) {
+		syslog(LOG_ERR, "Failed to turn on port %s pin %d", port, pin);
+	}
+
+	blob_buf_free(&buf);
+	ubus_free(ctx);
+
+	return 0;
+}
+
+int turn_pin_off(cJSON *port_off, cJSON *pin_off)
+{
+	char *port[20];
+	int pin = pin_off->valueint;
+	strncpy(port, port_off->valuestring, 15);
+
+	struct ubus_context *ctx = ubus_connect(NULL);
+	if (!ctx) {
+		syslog(LOG_ERR, "Failed to connect to UBUS");
+		return -1;
+	}
+
+	uint32_t id;
+	struct blob_buf buf = {0};
+    blob_buf_init(&buf, 0);
+    blobmsg_add_string(&buf, "port", port);
+    blobmsg_add_u32(&buf, "pin", pin);
+
+	struct ubus_object_data obj;
+	if (ubus_lookup_id(ctx, "esp", &id) ||
+		ubus_invoke(ctx, id, "off", buf.head, ubus_response_cb, NULL, 3000)) {
+		syslog(LOG_ERR, "Failed to turn on port %s pin %d", port, pin);
+	}
+
+	blob_buf_free(&buf);
+	ubus_free(ctx);
+
+	return 0;
+}
+
+
+struct Device {
+    char port[20];
+    char vendor_id[5];
+    char product_id[5];
+};
+
+static const struct blobmsg_policy device_policy[] = {
+    [0] = { .name = "port", .type = BLOBMSG_TYPE_STRING },
+    [1] = { .name = "vendor_id", .type = BLOBMSG_TYPE_STRING },
+    [2] = { .name = "product_id", .type = BLOBMSG_TYPE_STRING },
+};
+
+static void device_cb(struct ubus_request *req, int type, struct blob_attr *msg) {
+    struct Device *device_list = (struct Device *)req->priv;
+    struct blob_attr *tb;
+    int rem;
+    int i = 0;
+
+    blobmsg_for_each_attr(tb, blobmsg_data(msg), rem) {
+        struct blob_attr *dev_attrs[3];
+        blobmsg_parse(device_policy, sizeof(device_policy) / sizeof(device_policy[0]), dev_attrs,
+                      blobmsg_data(tb), blobmsg_data_len(tb));
+
+        if (!dev_attrs[0] || !dev_attrs[1] || !dev_attrs[2]) {
+            syslog(LOG_ERR, "Incomplete device information received");
+            continue;
+        }
+
+        strncpy(device_list[i].port, blobmsg_get_string(dev_attrs[0]), sizeof(device_list[i].port));
+        strncpy(device_list[i].vendor_id, blobmsg_get_string(dev_attrs[1]), sizeof(device_list[i].vendor_id));
+        strncpy(device_list[i].product_id, blobmsg_get_string(dev_attrs[2]), sizeof(device_list[i].product_id));
+
+        i++;
+    }
+	strcpy(device_list[i].port, "-1");
+}
+
+
+int send_devices_list(tuya_mqtt_context_t *context, cJSON *get_dev_list_value)
+{
+
+	bool get_dev = cJSON_IsTrue(get_dev_list_value);
+	if (!get_dev) {
+		syslog(LOG_INFO, "Getting devices list is not enabled");
+		char send_list[80];
+		sprintf(send_list, "{\"devices_array_i\":{\"value\":%s}}", "[]");
+		tuyalink_thing_property_report_with_ack(context, NULL, send_list);
+		syslog(LOG_INFO, "%s", send_list);
+		return -1;
+	}
+
+	int rc = 0;
+	struct ubus_context *ctx;
+    uint32_t id;
+
+    struct Device device_list[10];
+
+    ctx = ubus_connect(NULL);
+    if (!ctx) {
+        syslog(LOG_ERR, "Failed to connect to ubus");
+        return -1;
+    }
+
+    if (ubus_lookup_id(ctx, "esp", &id) ||
+        ubus_invoke(ctx, id, "devices", NULL, device_cb, device_list, 3000)) {
+        syslog(LOG_ERR, "Cannot request device list from esp");
+        rc = -1;
+    } else {
+		int i = 0;
+		char devices[150] = "";
+		while (strcmp(device_list[i].port, "-1")) {
+			syslog(LOG_INFO, "Device %d:", i);
+            syslog(LOG_INFO, "Port: %s", device_list[i].port);
+            syslog(LOG_INFO, "Vendor ID: %s", device_list[i].vendor_id);
+            syslog(LOG_INFO, "Product ID: %s", device_list[i].product_id);
+
+			char *device[50];
+			sprintf(device, "\"Port: %s, VID: %s, PID: %s\", ", device_list[i].port, device_list[i].vendor_id, device_list[i].product_id);
+			strcat(devices, device);
+
+			
+			i++;
+		}
+		syslog(LOG_INFO, "DEVICES: %s", devices);
+		char *data[200];
+		sprintf(data, "{\"devices_array_i\":{\"value\":[%s]}}", devices);
+		tuyalink_thing_property_report_with_ack(context, NULL, data);
+		syslog(LOG_INFO, data);
+	}
+
+    ubus_free(ctx);
+
+    return rc;
 }
