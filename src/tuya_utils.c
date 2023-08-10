@@ -2,7 +2,7 @@
 #include "tuya_cacert.h"
 #include <libubox/blobmsg_json.h>
 #include <libubus.h>
-#include "ubus_invoke.h"
+#include "ubus_utils.h"
 
 static void on_connected(tuya_mqtt_context_t *context, void *user_data)
 {
@@ -20,7 +20,7 @@ static void on_messages(tuya_mqtt_context_t *context, void *user_data, const tuy
 	case THING_TYPE_ACTION_EXECUTE: {
 		cJSON *root = cJSON_Parse(msg->data_string);
 		if (root != NULL) {
-			transfer_data_from_cloud(context, msg, root);
+			transfer_data(context, msg, root);
 		} else {
 			syslog(LOG_ERR, "Failed: JSON parse was not successful");
 		}
@@ -62,62 +62,54 @@ int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments)
     return 0;
 }
 
-void transfer_data_from_cloud(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root)
+void transfer_data(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root)
 {
-	cJSON *input_params = cJSON_GetObjectItem(root, "inputParams");
+	cJSON *actionCode = cJSON_GetObjectItem(root, "actionCode");
 
-	if (input_params == NULL) {
-		syslog(LOG_ERR, "Failed to get 'inputParams from JSON");
+	if (actionCode == NULL) {
+		syslog(LOG_ERR, "Failed to get 'actionCode' from JSON");
+		return;
+	}
+	cJSON *inputParams = cJSON_GetObjectItem(root, "inputParams");
+	if (inputParams == NULL ){
+		syslog(LOG_ERR, "Failed to get 'inputParams' from JSON");
 		return;
 	}
 
-	cJSON *port_on = cJSON_GetObjectItem(input_params, "port_on");
-	cJSON *pin_on = cJSON_GetObjectItem(input_params, "pin_on");
-	if (port_on != NULL && pin_on != NULL) {
-		if (turn_pin_on(port_on, pin_on)){
-			syslog(LOG_ERR, "Failed to turn on pin");
-		}
-	} else {
-		syslog(LOG_ERR, "Failed to get turn on values from inputParams");
+	if (!strcmp(actionCode->valuestring, "get_device_list_i")){
+		send_devices_list(context);
+	} 
+	else if (!strcmp(actionCode->valuestring, "turn_on_i")) {
+		turn_pin_on(inputParams);
 	}
-
-	cJSON *port_off = cJSON_GetObjectItem(input_params, "port_off");
-	cJSON *pin_off = cJSON_GetObjectItem(input_params, "pin_off");
-	if (port_off != NULL && pin_off != NULL) {
-		if (turn_pin_off(port_off, pin_off)){
-			syslog(LOG_ERR, "Failed to turn off pin");
-		}
-	} else {
-		syslog(LOG_ERR, "Failed to get turn off values from inputParams");
+	else if (!strcmp(actionCode->valuestring, "turn_off_i")){
+		turn_pin_off(inputParams);
 	}
-
-	cJSON *get_devices_list = cJSON_GetObjectItem(input_params, "get_dev_list_i");
-	if (get_devices_list != NULL) {
-		send_devices_list(context, get_devices_list);
-	} else {
-		syslog(LOG_ERR, "Unable to get devices list identifier");
+	else {
+		syslog(LOG_ERR, "Failed. Unknown action code");
 	}
 
 	return;
 }
 
-int turn_pin_on(cJSON *port_on, cJSON *pin_on)
-{
+int turn_pin_on(cJSON *inputParams)
+{	
+	cJSON *port_on = cJSON_GetObjectItem(inputParams, "port_on");
+	cJSON *pin_on = cJSON_GetObjectItem(inputParams, "pin_on");
+	if (!(port_on != NULL && pin_on != NULL)) {
+			syslog(LOG_ERR, "Failed to get turn on values from inputParams");
+			return -1;
+	}
+
 	char *port[20];
 	int pin = pin_on->valueint;
 	strncpy(port, port_on->valuestring, 15);
 
-	struct ubus_context *ctx = ubus_connect(NULL);
-	if (!ctx) {
-		syslog(LOG_ERR, "Failed to connect to UBUS");
-		return -1;
-	}
-
 	uint32_t id;
 	struct blob_buf buf = {0};
-    blob_buf_init(&buf, 0);
-    blobmsg_add_string(&buf, "port", port);
-    blobmsg_add_u32(&buf, "pin", pin);
+	blob_buf_init(&buf, 0);
+	blobmsg_add_string(&buf, "port", port);
+	blobmsg_add_u32(&buf, "pin", pin);
 
 	struct ubus_object_data obj;
 	if (ubus_lookup_id(ctx, "esp", &id) ||
@@ -126,28 +118,28 @@ int turn_pin_on(cJSON *port_on, cJSON *pin_on)
 	}
 
 	blob_buf_free(&buf);
-	ubus_free(ctx);
 
 	return 0;
 }
 
-int turn_pin_off(cJSON *port_off, cJSON *pin_off)
+int turn_pin_off(cJSON *inputParams)
 {
+	cJSON *port_off = cJSON_GetObjectItem(inputParams, "port_off");
+	cJSON *pin_off = cJSON_GetObjectItem(inputParams, "pin_off");
+	if (!(port_off != NULL && pin_off != NULL)) {
+			syslog(LOG_ERR, "Failed to get turn off values from inputParams");
+			return -1;
+	}
+
 	char *port[20];
 	int pin = pin_off->valueint;
 	strncpy(port, port_off->valuestring, 15);
 
-	struct ubus_context *ctx = ubus_connect(NULL);
-	if (!ctx) {
-		syslog(LOG_ERR, "Failed to connect to UBUS");
-		return -1;
-	}
-
 	uint32_t id;
 	struct blob_buf buf = {0};
-    blob_buf_init(&buf, 0);
-    blobmsg_add_string(&buf, "port", port);
-    blobmsg_add_u32(&buf, "pin", pin);
+	blob_buf_init(&buf, 0);
+	blobmsg_add_string(&buf, "port", port);
+	blobmsg_add_u32(&buf, "pin", pin);
 
 	struct ubus_object_data obj;
 	if (ubus_lookup_id(ctx, "esp", &id) ||
@@ -156,55 +148,79 @@ int turn_pin_off(cJSON *port_off, cJSON *pin_off)
 	}
 
 	blob_buf_free(&buf);
-	ubus_free(ctx);
 
 	return 0;
 }
 
-int send_devices_list(tuya_mqtt_context_t *context, cJSON *get_dev_list_value)
+int send_devices_list(tuya_mqtt_context_t *context)
 {
-
-	bool get_dev = cJSON_IsTrue(get_dev_list_value);
-	if (!get_dev) {
-		syslog(LOG_INFO, "Getting devices list is not enabled");
-		char send_list[80];
-		sprintf(send_list, "{\"devices_array_i\":{\"value\":%s}}", "[]");
-		tuyalink_thing_property_report_with_ack(context, NULL, send_list);
-		syslog(LOG_INFO, "%s", send_list);
-		return -1;
-	}
-
 	int rc = 0;
-	struct ubus_context *ctx;
     uint32_t id;
-
-    struct Device device_list[10];
-
-    ctx = ubus_connect(NULL);
-    if (!ctx) {
-        syslog(LOG_ERR, "Failed to connect to ubus");
-        return -1;
-    }
+	char devices_json_string[200] = "";
 
     if (ubus_lookup_id(ctx, "esp", &id) ||
-        ubus_invoke(ctx, id, "devices", NULL, device_cb, device_list, 3000)) {
+        ubus_invoke(ctx, id, "devices", NULL, device_cb, devices_json_string, 3000)) {
         syslog(LOG_ERR, "Cannot request device list");
         rc = -1;
     } else {
-		int i = 0;
-		char devices[150] = "";
-		while (strcmp(device_list[i].port, "-1")) {
-			char *device[50];
-			sprintf(device, "\"Port: %s, VID: %s, PID: %s\", ", device_list[i].port, device_list[i].vendor_id, device_list[i].product_id);
-			strcat(devices, device);
-			i++;
-		}
-		char *data[200];
-		sprintf(data, "{\"devices_array_i\":{\"value\":[%s]}}", devices);
-		tuyalink_thing_property_report_with_ack(context, NULL, data);
+		char jsonDataString[200] = "";
+		if(get_device_json_string(devices_json_string, &jsonDataString)) {
+			syslog(LOG_ERR, "Unable to get device json string");
+		};
+		tuyalink_thing_property_report_with_ack(context, NULL, jsonDataString);
 	}
 
-    ubus_free(ctx);
-
     return rc;
+}
+
+int get_device_json_string(char *json_string, char *outputstring)
+{	
+	cJSON *data_root = cJSON_Parse(json_string);
+    if (data_root == NULL) {
+		cJSON_Delete(data_root);
+        printf("Error parsing JSON: %s\n", cJSON_GetErrorPtr());
+        return 1;
+    }
+
+    cJSON *devices_array = cJSON_GetObjectItem(data_root, "devices");
+    if (!cJSON_IsArray(devices_array)) {
+        printf("'devices' is not an array.\n");
+        cJSON_Delete(data_root);
+        return 1;
+    }
+
+	int count = 0;
+	cJSON *root = cJSON_CreateObject();
+	cJSON *devices = cJSON_CreateObject();
+	cJSON *values = cJSON_CreateArray();
+
+    cJSON *device = NULL;
+    cJSON_ArrayForEach(device, devices_array) {
+        cJSON *port = cJSON_GetObjectItem(device, "port");
+        cJSON *vendor_id = cJSON_GetObjectItem(device, "vendor_id");
+        cJSON *product_id = cJSON_GetObjectItem(device, "product_id");
+
+        if (port && vendor_id && product_id) {
+			char *device_info[50];
+			sprintf(device_info, "\"Port: %s, VID: %s, PID: %s\", ", port->valuestring, vendor_id->valuestring, product_id->valuestring);
+			cJSON_AddItemToArray(values, cJSON_CreateString(device_info));
+			count++;
+        }
+    }
+
+	if (count != 0) {
+		cJSON_AddItemToObject(devices, "value", values);
+		cJSON_AddItemToObject(root, "devices_array_i", devices);
+
+		char *json_data = cJSON_Print(root);
+		strncpy(outputstring, json_data, 200);
+		free(json_data);
+	} else {
+		syslog(LOG_INFO, "Get device list: No devices found");
+	}
+		
+	cJSON_Delete(root);
+    cJSON_Delete(data_root);
+	
+	return 0;
 }

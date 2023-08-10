@@ -9,7 +9,7 @@
 #include "arg_struct.h"
 
 #include "tuya_utils.h"
-#include "ubus_invoke.h"
+#include "ubus_utils.h"
 #include "helpers.h"
 
 volatile sig_atomic_t g_signal_flag = 1;
@@ -44,16 +44,22 @@ int main(int argc, char **argv)
 
 	struct arguments arguments;
 	arguments.daemonize = false;
+	
+	ctx = ubus_connect(NULL);
+	if (!ctx) {
+		syslog(LOG_ERR, "Failed to connect to UBUS");
+		goto closing_log;
+	}
 
 	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 		syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");
 
-		goto closing_log;
+		goto ubus_cleanup;
 	}
 
 	if (arguments.daemonize) {
 		if(daemonize()){
-			goto closing_log;
+			goto ubus_cleanup;
 		}
 	}
 
@@ -61,7 +67,7 @@ int main(int argc, char **argv)
 
 	if (tuya_init(client, &ret, arguments)) {
 		if (ret == -1) {
-			goto closing_log;
+			goto ubus_cleanup;
 		}
 		goto tuya_cleanup;
 	}
@@ -75,6 +81,8 @@ int main(int argc, char **argv)
 	tuya_mqtt_disconnect(client);
 	tuya_cleanup:
 		ret = tuya_mqtt_deinit(client);
+	ubus_cleanup:
+		ubus_free(ctx);
 	closing_log:
 		closelog();
 	

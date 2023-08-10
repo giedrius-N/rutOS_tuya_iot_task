@@ -1,8 +1,10 @@
-#ifndef UBUS_INVOKE_H
-#define UBUS_INVOKE_H
+#ifndef UBUS_UTILS_H
+#define UBUS_UTILS_H
 
 #include <libubox/blobmsg_json.h>
 #include <libubus.h>
+
+struct ubus_context *ctx;
 
 struct Device {
     char port[20];
