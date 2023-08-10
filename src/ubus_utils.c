@@ -6,8 +6,10 @@
 
 void device_cb(struct ubus_request *req, int type, struct blob_attr *msg) {
     char *devices_json_string = (char *)req->priv;
-    
-    strcpy(devices_json_string, blobmsg_format_json(msg, true));
+
+    char *json_data = blobmsg_format_json(msg, true);
+    strncpy(devices_json_string, json_data, 200);
+    free(json_data);
 }
 
 void ubus_response_cb(struct ubus_request *req, int type, struct blob_attr *msg) {

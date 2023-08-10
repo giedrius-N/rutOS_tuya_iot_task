@@ -169,7 +169,7 @@ int send_devices_list(tuya_mqtt_context_t *context)
 		};
 		tuyalink_thing_property_report_with_ack(context, NULL, jsonDataString);
 	}
-
+	
     return rc;
 }
 
