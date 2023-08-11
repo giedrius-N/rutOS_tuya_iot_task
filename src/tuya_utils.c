@@ -80,10 +80,10 @@ void transfer_data(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, 
 		send_devices_list(context);
 	} 
 	else if (!strcmp(actionCode->valuestring, "turn_on_i")) {
-		turn_pin_on(inputParams);
+		turn_pin_on(inputParams, context);
 	}
 	else if (!strcmp(actionCode->valuestring, "turn_off_i")){
-		turn_pin_off(inputParams);
+		turn_pin_off(inputParams, context);
 	}
 	else {
 		syslog(LOG_ERR, "Failed. Unknown action code");
@@ -92,11 +92,11 @@ void transfer_data(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, 
 	return;
 }
 
-int turn_pin_on(cJSON *inputParams)
+int turn_pin_on(cJSON *inputParams, tuya_mqtt_context_t *context)
 {	
 	cJSON *port_on = cJSON_GetObjectItem(inputParams, "port_on");
 	cJSON *pin_on = cJSON_GetObjectItem(inputParams, "pin_on");
-	if (!(port_on != NULL && pin_on != NULL)) {
+	if (port_on == NULL && pin_on == NULL) {
 			syslog(LOG_ERR, "Failed to get turn on values from inputParams");
 			return -1;
 	}
@@ -111,18 +111,28 @@ int turn_pin_on(cJSON *inputParams)
 	blobmsg_add_string(&buf, "port", port);
 	blobmsg_add_u32(&buf, "pin", pin);
 
-	struct ubus_object_data obj;
 	if (ubus_lookup_id(ctx, "esp", &id) ||
 		ubus_invoke(ctx, id, "on", buf.head, ubus_response_cb, NULL, 3000)) {
-		syslog(LOG_ERR, "Failed to turn on port %s pin %d", port, pin);
+		char response[100];
+		sprintf(response, "Failed to turn on port %s pin %d", port, pin);
+		syslog(LOG_ERR, response);
+
+		char status[100];
+		sprintf(status, "{\"status\":{\"value\":\"%s\"}}", response);
+		tuyalink_thing_property_report_with_ack(context, NULL, status);
+	} else {
+		char status[100];
+		sprintf(status, "{\"status\":{\"value\":\"success\"}}");
+		tuyalink_thing_property_report_with_ack(context, NULL, status);
 	}
+
 
 	blob_buf_free(&buf);
 
 	return 0;
 }
 
-int turn_pin_off(cJSON *inputParams)
+int turn_pin_off(cJSON *inputParams, tuya_mqtt_context_t *context)
 {
 	cJSON *port_off = cJSON_GetObjectItem(inputParams, "port_off");
 	cJSON *pin_off = cJSON_GetObjectItem(inputParams, "pin_off");
@@ -141,11 +151,21 @@ int turn_pin_off(cJSON *inputParams)
 	blobmsg_add_string(&buf, "port", port);
 	blobmsg_add_u32(&buf, "pin", pin);
 
-	struct ubus_object_data obj;
 	if (ubus_lookup_id(ctx, "esp", &id) ||
 		ubus_invoke(ctx, id, "off", buf.head, ubus_response_cb, NULL, 3000)) {
-		syslog(LOG_ERR, "Failed to turn on port %s pin %d", port, pin);
+		char response[100];
+		sprintf(response, "Failed to turn off port %s pin %d", port, pin);
+		syslog(LOG_ERR, response);
+
+		char status[100];
+		sprintf(status, "{\"status\":{\"value\":\"%s\"}}", response);
+		tuyalink_thing_property_report_with_ack(context, NULL, status);
+	} else {
+		char status[100];
+		sprintf(status, "{\"status\":{\"value\":\"success\"}}");
+		tuyalink_thing_property_report_with_ack(context, NULL, status);
 	}
+	
 
 	blob_buf_free(&buf);
 
@@ -160,20 +180,33 @@ int send_devices_list(tuya_mqtt_context_t *context)
 
     if (ubus_lookup_id(ctx, "esp", &id) ||
         ubus_invoke(ctx, id, "devices", NULL, device_cb, devices_json_string, 3000)) {
-        syslog(LOG_ERR, "Cannot request device list");
+        char response[100] = "Cannot request device list";
+		syslog(LOG_ERR, response);
+		char status[100];
+		sprintf(status, "{\"status\":{\"value\":\"%s\"}}", response);
+		tuyalink_thing_property_report_with_ack(context, NULL, status);
         rc = -1;
     } else {
 		char jsonDataString[200] = "";
-		if(get_device_json_string(devices_json_string, &jsonDataString)) {
+		if(get_device_json_string(devices_json_string, &jsonDataString, context)) {
 			syslog(LOG_ERR, "Unable to get device json string");
-		};
-		tuyalink_thing_property_report_with_ack(context, NULL, jsonDataString);
+			if (!strcmp(jsonDataString, "")){
+				char status[100];
+				sprintf(status, "{\"status\":{\"value\":\"No devices found\"}}");
+				tuyalink_thing_property_report_with_ack(context, NULL, status);
+			}
+		} else {
+			tuyalink_thing_property_report_with_ack(context, NULL, jsonDataString);
+			char status[100];
+			sprintf(status, "{\"status\":{\"value\":\"Success: device list sent\"}}");
+			tuyalink_thing_property_report_with_ack(context, NULL, status);
+		}
 	}
-	
+
     return rc;
 }
 
-int get_device_json_string(char *json_string, char *outputstring)
+int get_device_json_string(char *json_string, char *outputstring, tuya_mqtt_context_t *context)
 {	
 	cJSON *data_root = cJSON_Parse(json_string);
     if (data_root == NULL) {
@@ -216,7 +249,7 @@ int get_device_json_string(char *json_string, char *outputstring)
 		strncpy(outputstring, json_data, 200);
 		free(json_data);
 	} else {
-		syslog(LOG_INFO, "Get device list: No devices found");
+		syslog(LOG_INFO, "No devices found");
 	}
 		
 	cJSON_Delete(root);

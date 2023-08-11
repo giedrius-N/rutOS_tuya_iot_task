@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=tuya_iot
 PKG_RELEASE:=1
-PKG_VERSION:=1.5.37
+PKG_VERSION:=1.5.55
 
 include $(INCLUDE_DIR)/package.mk
 
