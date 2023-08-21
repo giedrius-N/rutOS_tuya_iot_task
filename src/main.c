@@ -11,6 +11,7 @@
 #include "tuya_utils.h"
 #include "ubus_utils.h"
 #include "helpers.h"
+#include "lua_utils.h"
 
 volatile sig_atomic_t g_signal_flag = 1;
 void sig_handler()
@@ -44,6 +45,38 @@ int main(int argc, char **argv)
 
 	struct arguments arguments;
 	arguments.daemonize = false;
+
+	// lua
+	syslog(LOG_INFO, "Right before lua_State *L");
+	
+	lua_State *L = luaL_newstate();
+	syslog(LOG_INFO, "Right before luaL_openlibs");
+    
+	 luaL_openlibs(L);
+	syslog(LOG_INFO, "Right before get_data_lua() if");
+	
+	if(get_data_lua(L) != 0) {
+		syslog(LOG_ERR, "Unable to lua");
+	}
+	syslog(LOG_INFO, "Right before lua clean");
+
+	/*
+	luaL_dofile(L, "/scripts/script.lua");
+
+	lua_getglobal(L, "get_data");
+    
+    if (lua_pcall(L, 0, 1, 0) != 0) {
+        lua_close(L);
+        return 1;
+    }
+    
+    if (lua_isstring(L, -1)) {
+        char *result[100] = lua_tostring(L, -1);
+        syslog(LOG_INFO, "Result from Lua get_data method: %s", result);
+    }
+	*/
+	lua_close(L);
+	// end of a lua
 	
 	ctx = ubus_connect(NULL);
 	if (!ctx) {

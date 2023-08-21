@@ -1,4 +1,4 @@
-LDLIBS := -llink_core -lmiddleware_implementation -lplatform_port -lutils_modules -lblobmsg_json -lubox -lubus -largp
+LDLIBS := -llink_core -lmiddleware_implementation -lplatform_port -lutils_modules -lblobmsg_json -lubox -lubus -largp -llua
 INCLUDES := -I../
 BIN := tuya_iot
 SRCS := $(wildcard *.c)

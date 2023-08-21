@@ -2,14 +2,14 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=tuya_iot
 PKG_RELEASE:=1
-PKG_VERSION:=1.5.55
+PKG_VERSION:=1.5.67
 
 include $(INCLUDE_DIR)/package.mk
 
 define Package/tuya_iot
 	CATEGORY:=Extra packages
 	TITLE:=tuya_iot
-	DEPENDS:=+libtuyasdk +libubus +libubox +libblobmsg-json +libuci
+	DEPENDS:=+libtuyasdk +libubus +libubox +libblobmsg-json +libuci +liblua
 endef
 
 define Package/tuya_iot/description
