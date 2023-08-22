@@ -3,33 +3,94 @@
 #include <lauxlib.h>
 #include "lua_utils.h"
 #include <syslog.h>
+#include <dirent.h>
+#include <string.h>
 
-int get_data_lua(lua_State *L)
-{   
-    //luaL_openlibs(L);
-    syslog(LOG_INFO, "1");
-    if (luaL_dofile(L, "/scripts/test.lua") != 0) {
-        syslog(LOG_ERR, "Unable to load Lua script");
-        return 1;
+int load_lua_files(lua_State *L[], const char *scriptDirectory, int *count) {
+    DIR *dir;
+    struct dirent *ent;
+    int i = 0;
+    if ((dir = opendir(scriptDirectory)) != NULL) {
+        while ((ent = readdir(dir)) != NULL && i != 15) {
+            if (ent->d_type == DT_REG && strstr(ent->d_name, ".lua") != NULL) {
+                lua_State *new_L = luaL_newstate();
+                luaL_openlibs(new_L);
+
+                char script_path[1024];
+                snprintf(script_path, sizeof(script_path), "%s%s", scriptDirectory, ent->d_name);
+
+                if (luaL_loadfile(new_L, script_path) || lua_pcall(new_L, 0, 0, 0)) {
+                    syslog(LOG_ERR, "Error loading Lua file: %s", lua_tostring(new_L, -1));
+                    lua_pop(new_L, 1);
+                }
+
+                lua_getglobal(new_L, "get_data");
+
+                if (!lua_isfunction(new_L, -1)) {
+                    syslog(LOG_ERR, "Function 'get_data' does not exist in %s Lua script.", script_path);
+                    lua_close(new_L);
+                    continue;
+                }
+
+                L[i++] = new_L;
+            }
+        }
+        closedir(dir);
+    } else {
+        syslog(LOG_ERR, "Unable to open directory");
     }
-    syslog(LOG_INFO, "2");
-	lua_getglobal(L, "test_lua");
-    syslog(LOG_INFO, "3");
 
-    if (lua_pcall(L, 0, 1, 0) != 0) {
-        //lua_close(L);
-        syslog(LOG_INFO, "Cannot call lua");
-        return 1;
-    }
-    syslog(LOG_INFO, "4");
-    if (lua_isstring(L, -1)) {
-        char *result[300];
-        syslog(LOG_INFO, "5");
-        strcpy(result, lua_tostring(L, -1));
-        syslog(LOG_INFO, "Result from Lua get_data method: %s", result);
-    }
+    *count = i;
 
-    syslog(LOG_INFO, "1");
+    return 0;
+}
 
-    return -1;
+int execute_lua(lua_State *Lstates[], int count)
+{
+    for (int i = 0; i < count; i++) {
+		lua_getglobal(Lstates[i], "get_data");
+        if (lua_pcall(Lstates[i], 0, 1, 0) != 0) {
+            continue;
+        }
+        if (lua_isstring(Lstates[i], -1)) {
+            char *result[150];
+            strcpy(result, lua_tostring(Lstates[i], -1));
+            syslog(LOG_INFO, "Result from Lua get_data method: %s", result);
+        }
+	}
+
+    return 0;
+}
+
+int init_lua(lua_State *Lstates[], int count)
+{
+    for (int i = 0; i < count; i++) {
+		lua_getglobal(Lstates[i], "init");
+		if (lua_pcall(Lstates[i], 0, 0, 0) != 0) {
+			syslog(LOG_INFO, "This state has no init in it");
+		}
+	}
+    
+    return 0;
+}
+
+int deinit_lua(lua_State *Lstates[], int count)
+{
+    for (int i = 0; i < count; i++) {
+		lua_getglobal(Lstates[i], "deinit");
+		if (lua_pcall(Lstates[i], 0, 0, 0) != 0) {
+			syslog(LOG_INFO, "This state has no deinit in it");
+		}
+	}
+
+    return 0;
+}
+
+int lua_free(lua_State *Lstates[], int count)
+{  
+    for (int i = 0; i < count; i++) {
+		lua_close(Lstates[i]);
+	}
+
+    return 0;
 }

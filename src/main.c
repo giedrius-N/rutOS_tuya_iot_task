@@ -25,6 +25,14 @@ int main(int argc, char **argv)
 	tuya_mqtt_context_t client_instance;
 	tuya_mqtt_context_t *client;
 
+	// LUA =========
+	
+	int count = 0;
+	lua_State *Lstates[15];
+	load_lua_files(Lstates, "/scripts/", &count);
+
+	//**********************************************
+
 	struct argp_option options[] = {
 		{"prodID", 'p', "STRING", 0, "DeviceID", 0},
 		{"devId", 'd', "STRING", 0, "DeviceSecret", 0},
@@ -45,38 +53,6 @@ int main(int argc, char **argv)
 
 	struct arguments arguments;
 	arguments.daemonize = false;
-
-	// lua
-	syslog(LOG_INFO, "Right before lua_State *L");
-	
-	lua_State *L = luaL_newstate();
-	syslog(LOG_INFO, "Right before luaL_openlibs");
-    
-	 luaL_openlibs(L);
-	syslog(LOG_INFO, "Right before get_data_lua() if");
-	
-	if(get_data_lua(L) != 0) {
-		syslog(LOG_ERR, "Unable to lua");
-	}
-	syslog(LOG_INFO, "Right before lua clean");
-
-	/*
-	luaL_dofile(L, "/scripts/script.lua");
-
-	lua_getglobal(L, "get_data");
-    
-    if (lua_pcall(L, 0, 1, 0) != 0) {
-        lua_close(L);
-        return 1;
-    }
-    
-    if (lua_isstring(L, -1)) {
-        char *result[100] = lua_tostring(L, -1);
-        syslog(LOG_INFO, "Result from Lua get_data method: %s", result);
-    }
-	*/
-	lua_close(L);
-	// end of a lua
 	
 	ctx = ubus_connect(NULL);
 	if (!ctx) {
@@ -105,11 +81,17 @@ int main(int argc, char **argv)
 		goto tuya_cleanup;
 	}
 
+	init_lua(Lstates, count);
+
 	while (g_signal_flag) {
 		tuya_mqtt_loop(client);
+		execute_lua(Lstates, count);
 
 		sleep(2);
 	}
+
+	deinit_lua(Lstates, count);
+	lua_free(Lstates, count);
 
 	tuya_mqtt_disconnect(client);
 	tuya_cleanup:
@@ -118,6 +100,6 @@ int main(int argc, char **argv)
 		ubus_free(ctx);
 	closing_log:
 		closelog();
-	
+
 	return ret;
 }
