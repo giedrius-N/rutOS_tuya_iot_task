@@ -62,6 +62,12 @@ int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments)
     return 0;
 }
 
+int send_lua_data(tuya_mqtt_context_t *context, const char *data)
+{
+	tuyalink_thing_property_report_with_ack(context, NULL, data);
+	return 0;
+}
+
 void transfer_data(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root)
 {
 	cJSON *actionCode = cJSON_GetObjectItem(root, "actionCode");

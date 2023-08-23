@@ -15,4 +15,6 @@ void send_available_memory(tuya_mqtt_context_t *context, int memory);
 
 void transfer_data_from_cloud(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root);
 
+int send_lua_data(tuya_mqtt_context_t *context, const char *data);
+
 #endif

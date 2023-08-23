@@ -5,6 +5,7 @@
 #include <syslog.h>
 #include <dirent.h>
 #include <string.h>
+#include "helpers.h"
 
 int load_lua_files(lua_State *L[], const char *scriptDirectory, int *count) {
     DIR *dir;
@@ -45,7 +46,7 @@ int load_lua_files(lua_State *L[], const char *scriptDirectory, int *count) {
     return 0;
 }
 
-int execute_lua(lua_State *Lstates[], int count)
+int execute_lua(lua_State *Lstates[], int count, tuya_mqtt_context_t *context)
 {
     for (int i = 0; i < count; i++) {
 		lua_getglobal(Lstates[i], "get_data");
@@ -55,6 +56,12 @@ int execute_lua(lua_State *Lstates[], int count)
         if (lua_isstring(Lstates[i], -1)) {
             char *result[150];
             strcpy(result, lua_tostring(Lstates[i], -1));
+            
+            if(!isJsonValid(result)) {
+                continue;
+            }
+
+            send_lua_data(context, result);
             syslog(LOG_INFO, "Result from Lua get_data method: %s", result);
         }
 	}
@@ -66,10 +73,15 @@ int init_lua(lua_State *Lstates[], int count)
 {
     for (int i = 0; i < count; i++) {
 		lua_getglobal(Lstates[i], "init");
+
+        if (!lua_isfunction(Lstates[i], -1)) {
+            continue;
+        }
+
 		if (lua_pcall(Lstates[i], 0, 0, 0) != 0) {
-			syslog(LOG_INFO, "This state has no init in it");
+            syslog(LOG_ERR, "Unable to call init function");
 		}
-	}
+	}   
     
     return 0;
 }
@@ -78,8 +90,13 @@ int deinit_lua(lua_State *Lstates[], int count)
 {
     for (int i = 0; i < count; i++) {
 		lua_getglobal(Lstates[i], "deinit");
+
+        if (!lua_isfunction(Lstates[i], -1)) {
+            continue;
+        }
+
 		if (lua_pcall(Lstates[i], 0, 0, 0) != 0) {
-			syslog(LOG_INFO, "This state has no deinit in it");
+            syslog(LOG_ERR, "Unable to call deinit function");
 		}
 	}
 

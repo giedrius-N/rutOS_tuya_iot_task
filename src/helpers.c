@@ -2,6 +2,7 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <cJSON.h>
 
 int daemonize()
 {
@@ -29,4 +30,15 @@ int daemonize()
 	close(STDERR_FILENO);
 	
 	return 0;
+}
+
+int isJsonValid(const char* jsonString) {
+    cJSON* json = cJSON_Parse(jsonString);
+    if (json == NULL) {
+		syslog(LOG_ERR, "Failed to parse JSON. Invalid JSON data: %s", jsonString);
+		cJSON_Delete(json);
+        return 0;
+    }
+    cJSON_Delete(json);
+    return 1;
 }

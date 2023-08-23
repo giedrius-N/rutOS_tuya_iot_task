@@ -25,13 +25,8 @@ int main(int argc, char **argv)
 	tuya_mqtt_context_t client_instance;
 	tuya_mqtt_context_t *client;
 
-	// LUA =========
-	
-	int count = 0;
+	int scripts_count = 0;
 	lua_State *Lstates[15];
-	load_lua_files(Lstates, "/scripts/", &count);
-
-	//**********************************************
 
 	struct argp_option options[] = {
 		{"prodID", 'p', "STRING", 0, "DeviceID", 0},
@@ -81,17 +76,18 @@ int main(int argc, char **argv)
 		goto tuya_cleanup;
 	}
 
-	init_lua(Lstates, count);
+	load_lua_files(Lstates, "/scripts/", &scripts_count);
+	init_lua(Lstates, scripts_count);
 
 	while (g_signal_flag) {
 		tuya_mqtt_loop(client);
-		execute_lua(Lstates, count);
+		execute_lua(Lstates, scripts_count, client);
 
 		sleep(2);
 	}
 
-	deinit_lua(Lstates, count);
-	lua_free(Lstates, count);
+	deinit_lua(Lstates, scripts_count);
+	lua_free(Lstates, scripts_count);
 
 	tuya_mqtt_disconnect(client);
 	tuya_cleanup:
