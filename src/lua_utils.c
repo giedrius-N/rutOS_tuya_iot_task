@@ -9,10 +9,10 @@
 
 int load_lua_files(lua_State *L[], const char *scriptDirectory, int *count) {
     DIR *dir;
-    struct dirent *ent;
     int i = 0;
     if ((dir = opendir(scriptDirectory)) != NULL) {
-        while ((ent = readdir(dir)) != NULL && i != 15) {
+        struct dirent *ent;
+        while ((ent = readdir(dir)) != NULL && i != MAX_LUA_SCRIPTS) {
             if (ent->d_type == DT_REG && strstr(ent->d_name, ".lua") != NULL) {
                 lua_State *new_L = luaL_newstate();
                 luaL_openlibs(new_L);
@@ -54,7 +54,7 @@ int execute_lua(lua_State *Lstates[], int count, tuya_mqtt_context_t *context)
             continue;
         }
         if (lua_isstring(Lstates[i], -1)) {
-            char *result[150];
+            char result[150];
             strcpy(result, lua_tostring(Lstates[i], -1));
             
             if(!isJsonValid(result)) {

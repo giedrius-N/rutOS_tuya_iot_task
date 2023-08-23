@@ -9,7 +9,6 @@
 #include "arg_struct.h"
 
 #include "tuya_utils.h"
-#include "ubus_utils.h"
 #include "helpers.h"
 #include "lua_utils.h"
 
@@ -26,7 +25,7 @@ int main(int argc, char **argv)
 	tuya_mqtt_context_t *client;
 
 	int scripts_count = 0;
-	lua_State *Lstates[15];
+	lua_State *Lstates[MAX_LUA_SCRIPTS];
 
 	struct argp_option options[] = {
 		{"prodID", 'p', "STRING", 0, "DeviceID", 0},
@@ -48,22 +47,16 @@ int main(int argc, char **argv)
 
 	struct arguments arguments;
 	arguments.daemonize = false;
-	
-	ctx = ubus_connect(NULL);
-	if (!ctx) {
-		syslog(LOG_ERR, "Failed to connect to UBUS");
-		goto closing_log;
-	}
 
 	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 		syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");
 
-		goto ubus_cleanup;
+		goto closing_log;
 	}
 
 	if (arguments.daemonize) {
 		if(daemonize()){
-			goto ubus_cleanup;
+			goto closing_log;
 		}
 	}
 
@@ -71,7 +64,7 @@ int main(int argc, char **argv)
 
 	if (tuya_init(client, &ret, arguments)) {
 		if (ret == -1) {
-			goto ubus_cleanup;
+			goto closing_log;
 		}
 		goto tuya_cleanup;
 	}
@@ -92,8 +85,6 @@ int main(int argc, char **argv)
 	tuya_mqtt_disconnect(client);
 	tuya_cleanup:
 		ret = tuya_mqtt_deinit(client);
-	ubus_cleanup:
-		ubus_free(ctx);
 	closing_log:
 		closelog();
 
