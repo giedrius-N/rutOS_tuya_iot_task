@@ -2,7 +2,11 @@
 #include "tuya_cacert.h"
 #include <libubox/blobmsg_json.h>
 #include <libubus.h>
-//#include "ubus_utils.h"
+#include "lua_utils.h"
+
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
 static void on_connected(tuya_mqtt_context_t *context, void *user_data)
 {
@@ -20,7 +24,7 @@ static void on_messages(tuya_mqtt_context_t *context, void *user_data, const tuy
 	case THING_TYPE_ACTION_EXECUTE: {
 		cJSON *root = cJSON_Parse(msg->data_string);
 		if (root != NULL) {
-			//transfer_data(context, msg, root);
+			transfer_data(context, msg, root);
 		} else {
 			syslog(LOG_ERR, "Failed: JSON parse was not successful");
 		}
@@ -31,7 +35,7 @@ static void on_messages(tuya_mqtt_context_t *context, void *user_data, const tuy
 
 	default:
 		break;
-	}
+	}	
 }
 
 int tuya_init(tuya_mqtt_context_t *client, int *ret, struct arguments arguments) {
@@ -66,4 +70,25 @@ int send_lua_data(tuya_mqtt_context_t *context, const char *data)
 {
 	tuyalink_thing_property_report_with_ack(context, NULL, data);
 	return 0;
+}
+
+void transfer_data(tuya_mqtt_context_t *context, const tuyalink_message_t *msg, cJSON *root)
+{
+	cJSON *actionCode = cJSON_GetObjectItem(root, "actionCode");
+
+	if (actionCode == NULL) {
+		syslog(LOG_ERR, "Failed to get 'actionCode' from JSON");
+		return;
+	}
+	cJSON *inputParams = cJSON_GetObjectItem(root, "inputParams");
+	if (inputParams == NULL ){
+		syslog(LOG_ERR, "Failed to get 'inputParams' from JSON");
+		return;
+	}
+
+	if (lua_handle_params(actionCode->valuestring, inputParams, context) != 0) {
+			syslog(LOG_ERR, "Unable to call lua_handle_params");	
+	}
+
+	return;
 }

@@ -69,7 +69,7 @@ int main(int argc, char **argv)
 		goto tuya_cleanup;
 	}
 
-	load_lua_files(Lstates, "/scripts/", &scripts_count);
+	load_lua_files(Lstates, "/usr/lua_modules/", &scripts_count);
 	init_lua(Lstates, scripts_count);
 
 	while (g_signal_flag) {

@@ -5,5 +5,7 @@
 
 int daemonize();
 int isJsonValid(const char* jsonString);
+int getResultValue(char *jsonStr, char *responseString);
+int checkAction(const char *input, const char *searchString);
 
 #endif
